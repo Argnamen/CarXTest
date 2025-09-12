@@ -8,7 +8,7 @@ public class SimpleTower : MonoBehaviour {
 
 	private float m_lastShotTime = -0.5f;
 	
-	void Update () {
+	void FixedUpdate () {
 		if (m_projectilePrefab == null)
 			return;
 

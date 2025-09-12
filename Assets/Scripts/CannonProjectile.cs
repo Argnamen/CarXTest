@@ -6,7 +6,7 @@ public class CannonProjectile : MonoBehaviour {
 	public int m_damage = 10;
 
 	void Update () {
-		var translation = transform.forward * m_speed;
+		var translation = Vector3.forward * m_speed;
 		transform.Translate (translation);
 	}
 

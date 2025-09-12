@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Threading;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class CannonTower : MonoBehaviour
 {
@@ -8,183 +6,130 @@ public class CannonTower : MonoBehaviour
     public float m_range = 4f;
     public GameObject m_projectilePrefab;
     public Transform m_shootPoint;
+    public Transform m_towerBase; // Основание башни для поворота
+    public float m_rotationSpeed = 5f; // Скорость поворота башни
 
-    private Monster m_target;
-    private Vector3 A_start;
-    private Vector3 V_a;
-
-    private Vector3 B_start;
-    private float V_b_magnitude = 0.2f;
+    public float m_basePrediction = 1.7f;
+    public float m_minPrediction = 1.0f;
+    public float m_maxPrediction = 3.0f;
 
     private float m_lastShotTime = -0.5f;
-    private Vector3 m_previousTargetPosition;
-    private float m_previousTime;
-
-    [Header("Результаты")]
-    public bool hasSolution;
-    public Vector3 interceptPoint;
-    public float tau;
-    public Vector3 firingDirection;
-    public float T_launch;
-
-    private void Start()
-    {
-        B_start = m_shootPoint.position;
-        m_previousTime = Time.time;
-    }
+    private Monster m_currentTarget;
+    private Vector3 m_currentAimPoint;
 
     void Update()
     {
         if (m_projectilePrefab == null || m_shootPoint == null)
             return;
 
-        // Ищем ближайшую цель
-        FindClosestTarget();
+        // Получаем цель
+        Monster target = GetClosestMonster();
 
-        if (m_target != null)
+        // Если цель изменилась, сбрасываем прицеливание
+        if (target != m_currentTarget)
         {
-            // Обновляем параметры цели
-            A_start = m_target.transform.position;
+            m_currentTarget = target;
+            m_currentAimPoint = target != null ? target.transform.position : Vector3.zero;
+        }
 
-            // Вычисляем скорость цели на основе перемещения
-            float currentTime = Time.time;
-            float deltaTime = currentTime - m_previousTime;
+        if (m_currentTarget == null) return;
 
-            if (deltaTime > 0.01f) // Чтобы избежать деления на ноль
+        // Вычисляем новую точку прицеливания с упреждением
+        Vector3 newAimPoint = CalculateAimPoint(m_currentTarget);
+
+        // Плавно интерполируем точку прицеливания
+        m_currentAimPoint = Vector3.Lerp(m_currentAimPoint, newAimPoint, Time.deltaTime * m_rotationSpeed);
+
+        // Плавно поворачиваем башню
+        if (m_towerBase != null)
+        {
+            Vector3 direction = (m_currentAimPoint - m_towerBase.position).normalized;
+            if (direction != Vector3.zero)
             {
-                V_a = (A_start - m_previousTargetPosition) / deltaTime;
-                m_previousTargetPosition = A_start;
-                m_previousTime = currentTime;
+                // Сохраняем только горизонтальное вращение
+                direction.y = 0;
+                Quaternion targetRotation = Quaternion.LookRotation(direction);
+                m_towerBase.rotation = Quaternion.Slerp(m_towerBase.rotation, targetRotation, Time.deltaTime * m_rotationSpeed);
             }
+        }
 
-            B_start = m_shootPoint.position;
-
-            // Вычисляем решение перехвата
-            hasSolution = CalculateIntercept(A_start, V_a, B_start, V_b_magnitude, m_range,
-                                           out interceptPoint, out tau, out firingDirection, out T_launch);
-
-            if (hasSolution)
-            {
-                // Поворачиваем пушку в направлении выстрела
-                if (firingDirection != Vector3.zero)
-                {
-                    transform.rotation = Quaternion.LookRotation(firingDirection);
-                }
-
-                // Стреляем с интервалом
-                if (Time.time - m_lastShotTime >= m_shootInterval)
-                {
-                    Shoot();
-                    m_lastShotTime = Time.time;
-                }
-            }
+        // Проверяем, наведена ли башня на цель достаточно точно
+        if (IsAimedAtTarget() && m_lastShotTime + m_shootInterval <= Time.time)
+        {
+            Shoot();
         }
     }
 
-    void FindClosestTarget()
+    private void Shoot()
     {
-        Monster[] monsters = FindObjectsOfType<Monster>();
-        float closestDistance = Mathf.Infinity;
-        Monster closestMonster = null;
+        // ВАЖНО: Используем правильное направление для снаряда
+        // Направление от точки выстрела к цели
+        Vector3 shootDirection = (m_currentAimPoint - m_shootPoint.position).normalized;
 
-        foreach (var monster in monsters)
+        // Создаем снаряд с правильным вращением (направление выстрела)
+        Instantiate(m_projectilePrefab, m_shootPoint.position, Quaternion.LookRotation(shootDirection));
+
+        m_lastShotTime = Time.time;
+    }
+
+    private bool IsAimedAtTarget()
+    {
+        if (m_towerBase == null) return false;
+
+        // Проверяем направление от точки выстрела к цели
+        Vector3 currentDirection = m_towerBase.forward;
+        Vector3 targetDirection = (m_currentAimPoint - m_shootPoint.position).normalized;
+
+        // Сохраняем только горизонтальное направление для проверки
+        currentDirection.y = 0;
+        targetDirection.y = 0;
+
+        // Проверяем угол между текущим и целевым направлением
+        float angle = Vector3.Angle(currentDirection, targetDirection);
+        return angle < 5f; // Допустимая погрешность в градусах
+    }
+
+    private Monster GetClosestMonster()
+    {
+        Monster closest = null;
+        float minDistance = float.MaxValue;
+
+        foreach (var monster in FindObjectsOfType<Monster>())
         {
             float distance = Vector3.Distance(transform.position, monster.transform.position);
-            if (distance <= m_range && distance < closestDistance)
+            if (distance <= m_range && distance < minDistance)
             {
-                closestDistance = distance;
-                closestMonster = monster;
+                minDistance = distance;
+                closest = monster;
             }
         }
-
-        m_target = closestMonster;
-        if (m_target != null)
-        {
-            m_previousTargetPosition = m_target.transform.position;
-        }
+        return closest;
     }
 
-    void Shoot()
+    private Vector3 CalculateAimPoint(Monster monster)
     {
-        Instantiate(m_projectilePrefab, m_shootPoint.position, m_shootPoint.rotation);
-        Debug.Log("Выстрел! Время полета: " + tau);
+        // Направление движения монстра
+        Vector3 monsterDirection = (monster.m_moveTarget.transform.position - monster.transform.position).normalized;
+
+        // Расстояние от точки выстрела до монстра
+        float distance = Vector3.Distance(m_shootPoint.position, monster.transform.position);
+
+        // Время полета снаряда (расстояние / скорость)
+        float flightTime = distance / 0.2f; // m_speed = 0.2f
+
+        float predictionMultiplier = CalculatePredictionBasedOnRotationSpeed();
+        float monsterMoveDistance = monster.m_speed * flightTime * predictionMultiplier;
+
+        return monster.transform.position + monsterDirection * monsterMoveDistance + Vector3.up;
     }
 
-    /// <summary>
-    /// Статический метод для вычисления решения перехвата
-    /// </summary>
-    public static bool CalculateIntercept(Vector3 A_start, Vector3 V_a, Vector3 B_start,
-                                        float V_b_magnitude, float R,
-                                        out Vector3 interceptPoint, out float tau,
-                                        out Vector3 firingDirection, out float T_launch)
+    private float CalculatePredictionBasedOnRotationSpeed()
     {
-        interceptPoint = Vector3.zero;
-        tau = 0f;
-        firingDirection = Vector3.zero;
-        T_launch = 0f;
+        // Обратная зависимость: чем выше скорость поворота, тем меньше упреждение
+        // Формула: base / (1 + rotationSpeed * factor)
+        float rotationFactor = 0.1f; // Коэффициент влияния скорости поворота
+        float prediction = m_basePrediction / (1f + m_rotationSpeed * rotationFactor);
 
-        // Вектор от пушки к цели
-        Vector3 D_start = A_start - B_start;
-        float currentDistance = D_start.magnitude;
-
-        // Если цель уже внутри радиуса R, стреляем сразу
-        T_launch = 0f;
-
-        // Позиция цели в момент выстрела
-        Vector3 A_current = A_start + V_a * T_launch;
-
-        // Расчет времени полета снаряда
-        Vector3 D = A_current - B_start;
-
-        float a = V_a.sqrMagnitude - V_b_magnitude * V_b_magnitude;
-        float b = 2f * Vector3.Dot(D, V_a);
-        float c = D.sqrMagnitude;
-
-        float discriminant = b * b - 4f * a * c;
-        if (discriminant < 0f) return false;
-
-        float sqrtDiscriminant = Mathf.Sqrt(discriminant);
-        float tau1 = (-b + sqrtDiscriminant) / (2f * a);
-        float tau2 = (-b - sqrtDiscriminant) / (2f * a);
-
-        // Выбираем минимальное положительное время полета
-        if (tau1 >= 0 && tau2 >= 0)
-            tau = Mathf.Min(tau1, tau2);
-        else if (tau1 >= 0)
-            tau = tau1;
-        else if (tau2 >= 0)
-            tau = tau2;
-        else
-            return false;
-
-        // Точка перехвата
-        interceptPoint = A_current + V_a * tau;
-
-        // Направление выстрела (от пушки к точке перехвата)
-        firingDirection = (interceptPoint - B_start).normalized;
-
-        return true;
-    }
-
-    void OnDrawGizmos()
-    {
-        if (!hasSolution || m_target == null) return;
-
-        // Позиция цели в момент выстрела
-        Vector3 A_current = A_start + V_a * T_launch;
-
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawSphere(A_current, 0.1f);
-        Gizmos.DrawLine(A_start, A_current);
-
-        // Точка перехвата
-        Gizmos.color = Color.green;
-        Gizmos.DrawSphere(interceptPoint, 0.2f);
-        Gizmos.DrawLine(B_start, interceptPoint);
-        Gizmos.DrawLine(A_current, interceptPoint);
-
-        // Направление выстрела
-        Gizmos.color = Color.blue;
-        Gizmos.DrawRay(B_start, firingDirection * 3f);
+        return Mathf.Clamp(prediction, m_minPrediction, m_maxPrediction);
     }
 }
