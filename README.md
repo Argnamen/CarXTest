@@ -16,18 +16,26 @@
 
 ------------
 
-## Unity developer test Job in CarX
+Задача 4: (Приоритет оптимизация объектов и читаемость кода, отсутствие GetComponent и FindComponent в силу их сильного отрицательного влияния на производительность, применение шаблона проектирования и доп библиотек)
+1. Надо весь проект перевести на MVP паттерн, подключить Zenject и B3 (реактивность) 
+1.1. MVP паттерн нужен, чтобы разделить логику внешнюю/view (анимации, ссылки на объекты) и внутреннюю/model (координаты объекта для перемещение, связь с другими объектами, математика). Так же это оптимизирует дальнейшее уничтожение и связь объектов
+1.2. Zenject нужен для простоты связи моделей/model.
+1.3. R3 (реактивность) для осведомления башен о появлении противника (об этом дальше).
+1.4. Избавиться от логики в методах Update, так как в некоторых случаях (в частности в математике) из-за сильной зависимости от FPC, логика становится непредсказуемой и не тестируемой (работа превращается в танцы с бубном)
 
-**IMAGINE THAT YOU ARE BECOMING THE NEW AND ONLY DEVELOPER OF THE TEST PROJECT "CARX TOWER DEFENSE". HERE IS PROJECT IN ITS CURRENT STATE, YOUR TASKS IN ORDER OF PRIORITY:**
+2. Изменить логику определения целей для башен.
+2.1. При появлении монстра, башни должны получать уведомление об этом, а так же модель монстра. 
+2.2. После уведомления, башни считают, исходя из позиции монстра и радиуса своей атаки, время, через которое они должны обратиться к монстру с целью получения информации о том, жив он или нет. А так же, позицию, куда им нужно выстрелить, чтобы по нему попасть (количество выстрелов так же определяется исходя из количества здоровья монстра, силы атаки башни, а так же радиуса и скорости монстра)
+2.3. Если монстр жив, производится выстрел по указанным координатам и повторный опрос монстра на то, жив он или нет, после попадания (время, через которое снаряд должен попасть по цели, так же рассчитывается, исходя из расстояния от места выстрела до финальной позиции и скорости снаряда)
+2.4. Цикл повторяется пока монстр не умрёт или не закончится массив из выстрелов определенный на шаге 2.2
 
-##### Required:
-1. Implement a pre-emptive firing for Cannon Tower: add target search functionality so that the launched projectiles hit the target; the shells must fly straight out of the barrel; on a projectile in flight it is forbidden to apply any forces or corrections;
-2. Implement seeking and tracking of target for Cannon Tower; the rotation of the Canon Tower's barrel must be smooth; make it possible to adjust the speed of rotation of the gun;
-3. Implement an additional firing mode for the Cannon Tower: preemptive along a parabolic trajectory (gravity must act on the projectile); it should be possible to switch the CannonTower between two firing modes without changing the code;
+3. Изменить логику снарядов.
+3.1 В модели снаряда хранятся только:
+Переданные от башни при инициализации: скорость, тип двжения и финальная точка
+3.2 Снаряд ничего не ищет, колайдеров нет, он просто летит до финальной точки и уничтожается в конце.
+3.3 При инициализации модели определяется её логика движения (в финальной точке всегда идёт уничтожения снаряда)
 
-##### Optional:
-4. Inspect the project: refactor, redesign, optimize, correct founded defects. Implement a clear, understandable, simple architecture, without unnecessary clutter, in accordance with the principles of SOLID;
-5. For the logic of moving monsters, make an additional movement mode: with constant acceleration; it should be possible to adjust the acceleration value. Accordingly, the towers must hit the target monsters. It should be possible to switch the movement mode for monsters to any of all implemented movement modes.
-6. For the logic of moving monsters, make an additional movement mode: in a circle around the towers (at a constant speed, along a constant radius; it should be possible to adjust the values of speed and radius). Accordingly, the towers must hit the target monsters. It should be possible to switch the movement mode for monsters to any of all implemented movement modes.
-7. For the logic of moving monsters, make an additional movement mode: along a smooth trajectory based on a configurable array of points in space (checkpoints), at a constant speed (it should be possible to adjust the value of constant speed). Accordingly, the towers must hit the target monsters. It should be possible to switch the movement mode for monsters to any of all implemented movement modes.
-8. The project has the prefab “FlyingShield". This shield rotates around its owner (around the parent object) at a constant speed, constant radius and on a constant axis; all these parameters are configurable and must remain so. In doing so, the shield destroys any projectiles it encounters. The task is to connect this flying shield to the monsters so that the towers begin to fire their projectiles, among other conditions, only at the appropriate moments - when the tower “knows” for sure that its projectile will reach the monster without colliding with the shield.
+4. Изменить логику монстров
+4.1 Модель монстра хранит только его количество здоровья (публичный ReactiveProperty) и скорость.
+4.2 При инициализации, скрипт спавнера (или фабрика) передают ему информацию о типе монстра и типу движения. И исходя из типа, модель монстра определяет логику поведения.
+4.3 Так же можно подвязать реакцию на изменение здоровья монстра: уничтожение объекта монстра при 0 и индикация при попадании
