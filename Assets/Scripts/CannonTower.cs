@@ -1,13 +1,17 @@
 ﻿using UnityEngine;
+using UnityEngine.UIElements;
 
 public class CannonTower : MonoBehaviour
 {
     public float m_shootInterval = 0.5f;
     public float m_range = 4f;
     public GameObject m_projectilePrefab;
+    public GameObject m_ballisticProjectilePrefab;
     public Transform m_shootPoint;
     public Transform m_towerBase; // Основание башни для поворота
     public float m_rotationSpeed = 5f; // Скорость поворота башни
+
+    public bool m_ballistcMode = false;
 
     public float m_basePrediction = 1.7f;
     public float m_minPrediction = 1.0f;
@@ -43,14 +47,21 @@ public class CannonTower : MonoBehaviour
         // Плавно поворачиваем башню
         if (m_towerBase != null)
         {
-            Vector3 direction = (m_currentAimPoint - m_towerBase.position).normalized;
-            if (direction != Vector3.zero)
+            Vector3 direction = (m_currentAimPoint).normalized;
+
+            if (m_ballistcMode)
             {
                 // Сохраняем только горизонтальное вращение
                 direction.y = 0;
-                Quaternion targetRotation = Quaternion.LookRotation(direction);
-                m_towerBase.rotation = Quaternion.Slerp(m_towerBase.rotation, targetRotation, Time.deltaTime * m_rotationSpeed);
             }
+            else
+            {
+                direction.y *= -2;
+            }
+
+            Quaternion targetRotation = Quaternion.LookRotation(direction);
+            m_towerBase.rotation = Quaternion.Slerp(m_towerBase.rotation, targetRotation, Time.deltaTime * m_rotationSpeed);
+
         }
 
         // Проверяем, наведена ли башня на цель достаточно точно
@@ -64,10 +75,19 @@ public class CannonTower : MonoBehaviour
     {
         // ВАЖНО: Используем правильное направление для снаряда
         // Направление от точки выстрела к цели
-        Vector3 shootDirection = (m_currentAimPoint - m_shootPoint.position).normalized;
+        Vector3 shootDirection = (m_currentAimPoint).normalized;
+        shootDirection.y *= -2;
 
-        // Создаем снаряд с правильным вращением (направление выстрела)
-        Instantiate(m_projectilePrefab, m_shootPoint.position, Quaternion.LookRotation(shootDirection));
+        if (m_ballistcMode)
+        {
+            // Создаем снаряд с правильным вращением (направление выстрела)
+            Instantiate(m_ballisticProjectilePrefab, m_shootPoint.position, Quaternion.identity)
+            .GetComponent<BallisticProjectile>().targetPos = CalculateAimPoint(m_currentTarget);
+        }
+        else
+        {
+            Instantiate(m_projectilePrefab, m_shootPoint.position, Quaternion.LookRotation(shootDirection));
+        }
 
         m_lastShotTime = Time.time;
     }
@@ -78,7 +98,7 @@ public class CannonTower : MonoBehaviour
 
         // Проверяем направление от точки выстрела к цели
         Vector3 currentDirection = m_towerBase.forward;
-        Vector3 targetDirection = (m_currentAimPoint - m_shootPoint.position).normalized;
+        Vector3 targetDirection = (m_currentAimPoint).normalized;
 
         // Сохраняем только горизонтальное направление для проверки
         currentDirection.y = 0;
@@ -120,7 +140,7 @@ public class CannonTower : MonoBehaviour
         float predictionMultiplier = CalculatePredictionBasedOnRotationSpeed();
         float monsterMoveDistance = monster.m_speed * flightTime * predictionMultiplier;
 
-        return monster.transform.position + monsterDirection * monsterMoveDistance + Vector3.up;
+        return monster.transform.position + monsterDirection * monsterMoveDistance;
     }
 
     private float CalculatePredictionBasedOnRotationSpeed()
